@@ -488,8 +488,16 @@ func WithSTUNGatherTimeout(timeout time.Duration) AgentOption {
 	})
 }
 
-// WithIPFilter sets a filter for IP addresses used during candidate gathering.
-func WithIPFilter(filter func(net.IP) bool) AgentOption {
+// IPFilterInfo describes a local IP considered for candidate gathering.
+// IP is the local bind address (not the public address returned by STUN or TURN).
+type IPFilterInfo struct {
+	IP            net.IP
+	CandidateType CandidateType
+}
+
+// WithIPFilter sets a filter for local IP addresses used during candidate gathering.
+// Returning false prevents use of the IP for the specified candidate type.
+func WithIPFilter(filter func(IPFilterInfo) bool) AgentOption {
 	return agentOnlyOption(func(a *Agent) error {
 		a.ipFilter = filter
 
