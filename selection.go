@@ -25,6 +25,32 @@ func responseSymmetric(pendingRequest *bindingRequest, local Candidate, remoteAd
 		addrPortEqual(pendingRequest.destination, remoteAddr)
 }
 
+// failAsymmetricNomination fails the pair req was sent on (RFC 8445 §7.2.5.2.1: an
+// asymmetric response fails the check it answers) and, if it was the current
+// nomination, clears it so the next tick nominates another valid pair instead of
+// retrying this one forever. Only a nomination (USE-CANDIDATE) request applies.
+func (s *controllingSelector) failAsymmetricNomination(req *bindingRequest, local Candidate, remote netip.AddrPort) {
+	// Only a response from a different remote address fails the pair.
+	if !req.isUseCandidate || req.networkType != local.NetworkType() ||
+		addrPortEqual(req.destination, remote) {
+		return
+	}
+
+	for _, pair := range s.agent.checklist {
+		if pair.Local.Equal(local) && pair.Remote.NetworkType() == req.networkType &&
+			addrPortEqual(pair.Remote.addrPort(), req.destination) {
+			pair.state = CandidatePairStateFailed
+			pair.nominated = false
+
+			if s.nominatedPair == pair {
+				s.nominatedPair = nil
+			}
+
+			return
+		}
+	}
+}
+
 type controllingSelector struct {
 	startTime     time.Time
 	agent         *Agent
@@ -180,6 +206,7 @@ func (s *controllingSelector) HandleSuccessResponse(
 			pendingRequest.destination,
 			remote,
 		)
+		s.failAsymmetricNomination(pendingRequest, local, remoteAddr)
 
 		return
 	}
